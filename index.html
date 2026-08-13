@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora CNC & VoluMill + Comparador MRR</title>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- PWA Meta Tags & Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Asistente CNC">
+    <link rel="apple-touch-icon" href="icono.png">
+</head>
+<body>
+
+   
+
+    <!-- CONTENIDO PRINCIPAL DE LA APLICACIÓN -->
+    <div id="app-content" style="display: none;">
+        <header>
+            <h1>Asistente de Mecanizado CNC</h1>
+            <p>Cálculo de VoluMill & Comparativa de MRR</p>
+            <button class="btn-settings" id="btn-settings" type="button" onclick="toggleSettingsModal()" title="Configuración">⚙️</button>
+        </header>
+
+        <nav class="page-tabs">
+            <button id="tab-btn-volumill" class="active" type="button" onclick="switchPageTab('volumill')">🌀 VoluMill / Trocoidal</button>
+            <button id="tab-btn-mrr" type="button" onclick="switchPageTab('mrr')">📊 MRR / Planeadores & Insertos</button>
+        </nav>
+
+        <!-- PESTAÑA 1: CALCULADORA VOLUMILL -->
+        <main id="tab-volumill" class="tab-content active">
+            <div class="card">
+                <form id="calc-form-v" onsubmit="return false;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="dia">Diámetro Herramienta (D)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="dia" step="any" placeholder="Ej. 10" oninput="calculateVolumill()">
+                                <span class="unit-tag" id="unit-dia-v">mm</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="flutes">Número de Filos (z)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="flutes" step="1" placeholder="Ej. 4" oninput="handleFlutesInputV()">
+                                <span class="unit-tag">filos</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="rpm">RPM</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="rpm" step="any" placeholder="Ej. 3000" oninput="handleRpmInputV()" onclick="enableSpeedInput('rpm')" onfocus="enableSpeedInput('rpm')">
+                                <span class="unit-tag">RPM</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="vc">Velocidad Corte (Vc)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="vc" step="any" placeholder="Ej. 100" oninput="handleVcInputV()" onclick="enableSpeedInput('vc')" onfocus="enableSpeedInput('vc')">
+                                <span class="unit-tag" id="unit-vc-v">m/min</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fz">Avance / Filo (fz)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="fz" step="any" placeholder="Ej. 0.05" oninput="handleFzInputV()" onclick="enableFeedInput('fz')" onfocus="enableFeedInput('fz')">
+                                <span class="unit-tag" id="unit-fz-v">mm/f</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="vf">Avance Mesa (Vf)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="vf" step="any" placeholder="Ej. 600" oninput="handleVfInputV()" onclick="enableFeedInput('vf')" onfocus="enableFeedInput('vf')">
+                                <span class="unit-tag" id="unit-vf-v">mm/min</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="ae_fab">ae Fabricante (Factor D)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="ae_fab" step="any" placeholder="Ej. 0.5" oninput="calculateVolumill()">
+                                <span class="unit-tag">×D</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="ae_tra">ae a Trabajar (Factor D)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="ae_tra" step="any" placeholder="Ej. 0.1" oninput="calculateVolumill()">
+                                <span class="unit-tag">×D</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="warning-box-v" class="warning-box"></div>
+                    <button type="button" class="btn-reset" onclick="resetFormV()">Limpiar Campos</button>
+                </form>
+            </div>
+
+            <div class="results-card">
+                <h2>Resultados con Compensación</h2>
+                <div class="result-item">
+                    <span class="result-label">Factor de Compensación:</span>
+                    <span class="result-value" id="res-factor-v">---</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Nuevo fz Ajustado:</span>
+                    <span class="result-value highlight" id="res-fz-v">---</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Nuevo Vf Ajustado:</span>
+                    <span class="result-value highlight" id="res-vf-v">---</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- PESTAÑA 2: COMPARATIVA DE MRR PARA PLANEADORES E INSERTOS -->
+        <main id="tab-mrr" class="tab-content">
+            <div class="card">
+                <form id="calc-form-mrr" onsubmit="return false;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="mrr_ap">Profundidad Axial (ap)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="mrr_ap" step="any" placeholder="Ej. 2.5" oninput="calculateMrrPage()">
+                                <span class="unit-tag" id="unit-ap-mrr">mm</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mrr_ae">Ancho Radial (ae)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="mrr_ae" step="any" placeholder="Ej. 35" oninput="calculateMrrPage()">
+                                <span class="unit-tag" id="unit-ae-mrr">mm</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group full">
+                            <label for="mrr_vf">Avance de Mesa (Vf)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="mrr_vf" step="any" placeholder="Ej. 1200" oninput="calculateMrrPage()">
+                                <span class="unit-tag" id="unit-vf-mrr">mm/min</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="warning-box-mrr" class="warning-box"></div>
+                    <button type="button" class="btn-reset" onclick="resetFormMrr()">Limpiar Campos</button>
+                </form>
+            </div>
+
+            <div class="results-card">
+                <h2>Tasa de Remoción Calculada</h2>
+                <div class="result-item">
+                    <span class="result-label">Tasa Remoción de Material (MRR):</span>
+                    <span class="result-value highlight" id="res-mrr-val">---</span>
+                </div>
+            </div>
+
+            <div class="comparison-section">
+                <div class="comparison-header">
+                    <h3>Comparativa de Pasadas / Planeadores</h3>
+                    <div class="header-actions">
+                        <button type="button" class="btn-clear-table" onclick="clearMrrTable()">🗑️ Limpiar Tabla</button>
+                        <button type="button" class="btn-add-compare" onclick="addMrrComparison()">📌 Guardar en Tabla</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>ap</th>
+                                <th>ae</th>
+                                <th>Vf</th>
+                                <th>MRR</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mrr-tbody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                                    Ingresa ap, ae, Vf y presiona "Guardar en Tabla" para comparar.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Soporte técnico: <a href="mailto:j.huamayalli@gmail.com">j.huamayalli@gmail.com</a></p>
+        </footer>
+    </div>
+
+    <!-- MODAL DE CONFIGURACIÓN -->
+    <div id="settings-modal" class="modal" onclick="closeSettingsModalOnOutsideClick(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Configuración General</h2>
+                <button class="close-modal" type="button" onclick="toggleSettingsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <span class="setting-label">Sistema de Unidades</span>
+                    <div class="setting-control-group">
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-units" onchange="handleUnitToggle(this)">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-status" id="units-status">Métrico</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label">Tema Visual</span>
+                    <div class="setting-control-group">
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-theme" onchange="handleThemeToggle(this)">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-status" id="theme-status">Oscuro</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
