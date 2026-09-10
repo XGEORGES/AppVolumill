@@ -1,36 +1,146 @@
 // --- INICIO LOCAL DE LA APLICACIÓN ---
 
 document.addEventListener('DOMContentLoaded', function () {
-    const loginScreen = document.getElementById('login-screen');
-    const licenseScreen = document.getElementById('license-screen');
     const appContent = document.getElementById('app-content');
-
-    if (loginScreen) {
-        loginScreen.style.display = 'none';
-    }
-
-    if (licenseScreen) {
-        licenseScreen.style.display = 'none';
-    }
-
     if (appContent) {
         appContent.style.display = 'block';
     }
 
-    // Registrar el Service Worker para soporte PWA y Offline
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js')
-           .then((registration) => {
-                console.log('Service Worker registrado con éxito en el scope:', registration.scope);
-            })
-           .catch((error) => {
-                console.error('Error al registrar el Service Worker:', error);
-            });
-    }
+    // Inicializar detector de red (online / offline)
+    initNetworkStatusWatcher();
+
+    // Registrar y gestionar el Service Worker para soporte PWA, Offline y Actualizaciones
+    initServiceWorker();
 
     // Inicializar configuraciones guardadas
     initSettings();
 });
+
+// --- MONITOREO DE CONEXIÓN A INTERNET ---
+function initNetworkStatusWatcher() {
+    const statusElem = document.getElementById('network-status');
+    const statusText = document.getElementById('network-status-text');
+
+    function updateStatus() {
+        const isOnline = navigator.onLine;
+        if (!statusElem || !statusText) return;
+
+        if (isOnline) {
+            statusElem.className = 'network-status-badge online';
+            statusText.textContent = 'En línea (Nube sincronizada)';
+        } else {
+            statusElem.className = 'network-status-badge offline';
+            statusText.textContent = 'Modo Local (Sin internet)';
+        }
+    }
+
+    window.addEventListener('online', () => {
+        updateStatus();
+        showToastNotification('Conexión reestablecida. Verificando actualizaciones...');
+        // Si vuelve el internet, verificar de inmediato si hay una nueva versión del Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(reg => reg.update());
+        }
+    });
+
+    window.addEventListener('offline', () => {
+        updateStatus();
+        showToastNotification('Sin internet. Trabajando con la versión guardada en disco.');
+    });
+
+    // Estado inicial
+    updateStatus();
+}
+
+// --- GESTIÓN DE SERVICE WORKER & ACTUALIZACIONES AUTOMÁTICAS ---
+function initServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+        return;
+    }
+
+    let refreshing = false;
+    // Cuando el nuevo Service Worker toma el control, recargar para usar el nuevo código
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+        }
+    });
+
+    navigator.serviceWorker.register('./sw.js')
+        .then((registration) => {
+            console.log('[App] Service Worker registrado en scope:', registration.scope);
+
+            // 1. Si hay una nueva versión en espera de activarse
+            if (registration.waiting) {
+                notifyUserOfUpdate(registration.waiting);
+            }
+
+            // 2. Escuchar si se encuentra una nueva versión instalándose
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (!newWorker) return;
+
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // Hay una nueva versión instalada lista
+                        notifyUserOfUpdate(newWorker);
+                    }
+                });
+            });
+
+            // 3. Si hay conexión a internet, forzar comprobación de nueva versión
+            if (navigator.onLine) {
+                registration.update().catch(err => {
+                    console.log('[App] No se pudo verificar actualización en servidor:', err);
+                });
+            }
+        })
+        .catch((error) => {
+            console.error('[App] Error al registrar Service Worker:', error);
+        });
+}
+
+function notifyUserOfUpdate(worker) {
+    showToastNotification(
+        '¡Nueva versión disponible!',
+        'Actualizar',
+        () => {
+            worker.postMessage({ action: 'skipWaiting' });
+        }
+    );
+}
+
+// --- NOTIFICACIONES FLOTANTES (TOAST) ---
+function showToastNotification(message, buttonText = null, onButtonClick = null) {
+    let toast = document.getElementById('app-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'app-toast';
+        toast.className = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+
+    toast.innerHTML = `<span>${message}</span>`;
+    if (buttonText && onButtonClick) {
+        const btn = document.createElement('button');
+        btn.textContent = buttonText;
+        btn.onclick = () => {
+            onButtonClick();
+            toast.classList.remove('show');
+        };
+        toast.appendChild(btn);
+    }
+
+    toast.classList.add('show');
+
+    // Auto ocultar a los 5 segundos si no es un botón de acción crítica
+    if (!buttonText) {
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 5000);
+    }
+}
 
 // --- CONTROLES DE CONFIGURACIÓN GENERAL (MODAL & TOGGLES) ---
 function toggleSettingsModal() {

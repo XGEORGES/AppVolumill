@@ -20,10 +20,14 @@
    
 
     <!-- CONTENIDO PRINCIPAL DE LA APLICACIÓN -->
-    <div id="app-content" style="display: none;">
+    <div id="app-content">
         <header>
             <h1>Asistente de Mecanizado CNC</h1>
             <p>Cálculo de VoluMill & Comparativa de MRR</p>
+            <div id="network-status" class="network-status-badge online" title="Estado de la conexión">
+                <span class="network-status-dot"></span>
+                <span id="network-status-text">En línea</span>
+            </div>
             <button class="btn-settings" id="btn-settings" type="button" onclick="toggleSettingsModal()" title="Configuración">⚙️</button>
         </header>
 
