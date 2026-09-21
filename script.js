@@ -55,11 +55,12 @@ function initNetworkStatusWatcher() {
 // --- GESTIÓN DE SERVICE WORKER & ACTUALIZACIONES AUTOMÁTICAS ---
 function initServiceWorker() {
     if (!('serviceWorker' in navigator)) {
+        console.log('[App] Service Worker no es soportado en este navegador.');
         return;
     }
 
     let refreshing = false;
-    // Cuando el nuevo Service Worker toma el control, recargar para usar el nuevo código
+    // Recargar limpiamente cuando el nuevo worker tome el control
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) {
             refreshing = true;
@@ -69,9 +70,12 @@ function initServiceWorker() {
 
     navigator.serviceWorker.register('./sw.js')
         .then((registration) => {
-            console.log('[App] Service Worker registrado en scope:', registration.scope);
+            console.log('[App] Service Worker registrado correctamente:', registration.scope);
 
-            // 1. Si hay una nueva versión en espera de activarse
+            // Verificación de salud para asegurar que no esté pegado
+            checkServiceWorkerHealth();
+
+            // 1. Si ya hay una nueva versión en espera de activarse
             if (registration.waiting) {
                 notifyUserOfUpdate(registration.waiting);
             }
@@ -83,22 +87,37 @@ function initServiceWorker() {
 
                 newWorker.addEventListener('statechange', () => {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // Hay una nueva versión instalada lista
                         notifyUserOfUpdate(newWorker);
                     }
                 });
             });
 
-            // 3. Si hay conexión a internet, forzar comprobación de nueva versión
+            // 3. Comprobar actualizaciones en segundo plano si hay red
             if (navigator.onLine) {
-                registration.update().catch(err => {
-                    console.log('[App] No se pudo verificar actualización en servidor:', err);
+                registration.update().catch(() => {
+                    // Silencioso si la red no responde de inmediato
                 });
             }
         })
         .catch((error) => {
-            console.error('[App] Error al registrar Service Worker:', error);
+            console.warn('[App] Aviso al registrar Service Worker:', error);
         });
+}
+
+function checkServiceWorkerHealth() {
+    if (!navigator.serviceWorker.controller) return;
+
+    try {
+        const messageChannel = new MessageChannel();
+        messageChannel.port1.onmessage = (event) => {
+            if (event.data && event.data.status === 'active') {
+                console.log('[App] Motor Service Worker activo y respondiendo:', event.data.version);
+            }
+        };
+        navigator.serviceWorker.controller.postMessage({ action: 'ping' }, [messageChannel.port2]);
+    } catch (e) {
+        console.warn('[App] Ping al Service Worker no enviado:', e);
+    }
 }
 
 function notifyUserOfUpdate(worker) {
@@ -106,7 +125,12 @@ function notifyUserOfUpdate(worker) {
         '¡Nueva versión disponible!',
         'Actualizar',
         () => {
-            worker.postMessage({ action: 'skipWaiting' });
+            if (worker) {
+                worker.postMessage({ action: 'skipWaiting' });
+            }
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
         }
     );
 }
