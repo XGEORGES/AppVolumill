@@ -34,6 +34,7 @@
         <nav class="page-tabs">
             <button id="tab-btn-volumill" class="active" type="button" onclick="switchPageTab('volumill')">🌀 VoluMill / Trocoidal</button>
             <button id="tab-btn-mrr" type="button" onclick="switchPageTab('mrr')">📊 MRR / Planeadores & Insertos</button>
+            <button id="tab-btn-circular" type="button" onclick="switchPageTab('circular')">🔄 Interpolación Circular</button>
         </nav>
 
         <!-- PESTAÑA 1: CALCULADORA VOLUMILL -->
@@ -200,6 +201,70 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- PESTAÑA 3: INTERPOLACIÓN CIRCULAR (AVANCE TANGENCIAL) -->
+        <main id="tab-circular" class="tab-content">
+            <div class="card">
+                <div class="mode-selector-wrapper">
+                    <label class="section-label">Tipo de Mecanizado</label>
+                    <div class="mode-selector">
+                        <button type="button" id="circ-mode-interior" class="mode-btn active" onclick="setCircularMode('interior')">⭕ Cajera / Agujero Interior</button>
+                        <button type="button" id="circ-mode-exterior" class="mode-btn" onclick="setCircularMode('exterior')">🔘 Macho / Contorno Exterior</button>
+                    </div>
+                </div>
+
+                <form id="calc-form-circ" onsubmit="return false;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="circ_dia">Diámetro Herramienta (D)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="circ_dia" step="any" placeholder="Ej. 20" oninput="calculateCircular()">
+                                <span class="unit-tag" id="unit-dia-circ">mm</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="circ_part_dia" id="label-part-dia">Diámetro Cajera / Agujero (Dp)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="circ_part_dia" step="any" placeholder="Ej. 63" oninput="calculateCircular()">
+                                <span class="unit-tag" id="unit-partdia-circ">mm</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group full">
+                            <label for="circ_vf">Avance Ficha Técnica (F lineal al filo)</label>
+                            <div class="input-wrapper">
+                                <input type="number" id="circ_vf" step="any" placeholder="Ej. 1200" oninput="calculateCircular()">
+                                <span class="unit-tag" id="unit-vf-circ">mm/min</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="warning-box-circ" class="warning-box"></div>
+                    <button type="button" class="btn-reset" onclick="resetFormCircular()">Limpiar Campos</button>
+                </form>
+            </div>
+
+            <div class="results-card">
+                <h2>Compensación de Avance CNC</h2>
+                <div class="result-item">
+                    <span class="result-label">Avance a Programar CNC (Centro):</span>
+                    <span class="result-value highlight" id="res-circ-fprog">---</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Velocidad en Filo (sin compensar):</span>
+                    <span class="result-value" id="res-circ-freal">---</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Factor de Compensación:</span>
+                    <span class="result-value" id="res-circ-factor">---</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Diámetro Trayectoria Centro (Dc):</span>
+                    <span class="result-value" id="res-circ-dcenter">---</span>
                 </div>
             </div>
         </main>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cnc-assistant-v2';
+const CACHE_NAME = 'cnc-assistant-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

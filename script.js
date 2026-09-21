@@ -182,11 +182,13 @@ function initSettings() {
         if (unitsStatus) unitsStatus.textContent = 'Pulgadas';
         setUnitVolumill('imperial', true);
         setUnitMrr('imperial', true);
+        setUnitCircular('imperial', true);
     } else {
         if (unitToggle) unitToggle.checked = false;
         if (unitsStatus) unitsStatus.textContent = 'Métrico';
         setUnitVolumill('metric', true);
         setUnitMrr('metric', true);
+        setUnitCircular('metric', true);
     }
 }
 
@@ -199,6 +201,7 @@ function handleUnitToggle(elem) {
     
     setUnitVolumill(targetUnit, false);
     setUnitMrr(targetUnit, false);
+    setUnitCircular(targetUnit, false);
     
     localStorage.setItem('cnc-unit', targetUnit);
 }
@@ -222,9 +225,11 @@ function handleThemeToggle(elem) {
 function switchPageTab(tabName) {
     document.getElementById('tab-volumill').classList.toggle('active', tabName === 'volumill');
     document.getElementById('tab-mrr').classList.toggle('active', tabName === 'mrr');
+    document.getElementById('tab-circular').classList.toggle('active', tabName === 'circular');
 
     document.getElementById('tab-btn-volumill').classList.toggle('active', tabName === 'volumill');
     document.getElementById('tab-btn-mrr').classList.toggle('active', tabName === 'mrr');
+    document.getElementById('tab-btn-circular').classList.toggle('active', tabName === 'circular');
 }
 
 let unitV = 'metric';
@@ -609,4 +614,161 @@ function renderMrrTable() {
             </tr>
         `;
     }).join('');
+}
+
+// --- PESTAÑA 3: INTERPOLACIÓN CIRCULAR (AVANCE TANGENCIAL) ---
+let unitCirc = 'metric';
+let circularMode = 'interior'; // 'interior' | 'exterior'
+
+function setCircularMode(mode) {
+    circularMode = mode;
+    const btnInterior = document.getElementById('circ-mode-interior');
+    const btnExterior = document.getElementById('circ-mode-exterior');
+    const labelPartDia = document.getElementById('label-part-dia');
+
+    if (mode === 'interior') {
+        if (btnInterior) btnInterior.classList.add('active');
+        if (btnExterior) btnExterior.classList.remove('active');
+        if (labelPartDia) labelPartDia.textContent = 'Diámetro Cajera / Agujero (Dp)';
+    } else {
+        if (btnInterior) btnInterior.classList.remove('active');
+        if (btnExterior) btnExterior.classList.add('active');
+        if (labelPartDia) labelPartDia.textContent = 'Diámetro Macho / Contorno (Dp)';
+    }
+
+    calculateCircular();
+}
+
+function calculateCircular() {
+    const diaInput = document.getElementById('circ_dia');
+    const partDiaInput = document.getElementById('circ_part_dia');
+    const vfInput = document.getElementById('circ_vf');
+    const warnBox = document.getElementById('warning-box-circ');
+
+    const resFprog = document.getElementById('res-circ-fprog');
+    const resFreal = document.getElementById('res-circ-freal');
+    const resFactor = document.getElementById('res-circ-factor');
+    const resDcenter = document.getElementById('res-circ-dcenter');
+
+    if (!diaInput || !partDiaInput || !vfInput) return;
+
+    const d = parseFloat(diaInput.value);
+    const dp = parseFloat(partDiaInput.value);
+    const vf = parseFloat(vfInput.value);
+
+    // Reset warnings
+    if (warnBox) {
+        warnBox.style.display = 'none';
+        warnBox.innerHTML = '';
+    }
+
+    if (isNaN(d) || isNaN(dp) || isNaN(vf) || d <= 0 || dp <= 0 || vf <= 0) {
+        if (resFprog) resFprog.textContent = '---';
+        if (resFreal) resFreal.textContent = '---';
+        if (resFactor) resFactor.textContent = '---';
+        if (resDcenter) resDcenter.textContent = '---';
+        return;
+    }
+
+    const unitFeed = unitCirc === 'metric' ? ' mm/min' : ' in/min';
+    const unitDist = unitCirc === 'metric' ? ' mm' : ' pulg';
+
+    if (circularMode === 'interior') {
+        if (d >= dp) {
+            if (warnBox) {
+                warnBox.innerHTML = '⚠️ En mecanizado interior, el diámetro de la herramienta (D) debe ser menor al diámetro de la cajera/agujero (Dp).';
+                warnBox.style.display = 'block';
+            }
+            if (resFprog) resFprog.textContent = '---';
+            if (resFreal) resFreal.textContent = '---';
+            if (resFactor) resFactor.textContent = '---';
+            if (resDcenter) resDcenter.textContent = '---';
+            return;
+        }
+
+        const dc = dp - d;
+        const ratioProg = dc / dp; // Fprog = Vf * (Dp - D) / Dp
+        const ratioReal = dp / dc; // Freal sin compensar = Vf * Dp / (Dp - D)
+        const fProg = vf * ratioProg;
+        const fReal = vf * ratioReal;
+        const deltaPct = ((fProg - vf) / vf) * 100;
+
+        if (resFprog) resFprog.textContent = fProg.toFixed(1) + unitFeed;
+        if (resFreal) resFreal.textContent = fReal.toFixed(1) + unitFeed;
+        if (resFactor) resFactor.textContent = `${ratioProg.toFixed(3)} (${deltaPct.toFixed(1)}%)`;
+        if (resDcenter) resDcenter.textContent = dc.toFixed(3) + unitDist;
+    } else {
+        // Macho / Contorno Exterior
+        const dc = dp + d;
+        const ratioProg = dc / dp; // Fprog = Vf * (Dp + D) / Dp
+        const ratioReal = dp / dc; // Freal sin compensar = Vf * Dp / (Dp + D)
+        const fProg = vf * ratioProg;
+        const fReal = vf * ratioReal;
+        const deltaPct = ((fProg - vf) / vf) * 100;
+
+        if (resFprog) resFprog.textContent = fProg.toFixed(1) + unitFeed;
+        if (resFreal) resFreal.textContent = fReal.toFixed(1) + unitFeed;
+        if (resFactor) resFactor.textContent = `${ratioProg.toFixed(3)} (+${deltaPct.toFixed(1)}%)`;
+        if (resDcenter) resDcenter.textContent = dc.toFixed(3) + unitDist;
+    }
+}
+
+function resetFormCircular() {
+    const diaInput = document.getElementById('circ_dia');
+    const partDiaInput = document.getElementById('circ_part_dia');
+    const vfInput = document.getElementById('circ_vf');
+    const warnBox = document.getElementById('warning-box-circ');
+
+    if (diaInput) diaInput.value = '';
+    if (partDiaInput) partDiaInput.value = '';
+    if (vfInput) vfInput.value = '';
+    if (warnBox) {
+        warnBox.style.display = 'none';
+        warnBox.innerHTML = '';
+    }
+
+    const resFprog = document.getElementById('res-circ-fprog');
+    const resFreal = document.getElementById('res-circ-freal');
+    const resFactor = document.getElementById('res-circ-factor');
+    const resDcenter = document.getElementById('res-circ-dcenter');
+
+    if (resFprog) resFprog.textContent = '---';
+    if (resFreal) resFreal.textContent = '---';
+    if (resFactor) resFactor.textContent = '---';
+    if (resDcenter) resDcenter.textContent = '---';
+}
+
+function setUnitCircular(targetUnit, force = false) {
+    if (unitCirc === targetUnit && !force) return;
+
+    unitCirc = targetUnit;
+
+    const unitDia = document.getElementById('unit-dia-circ');
+    const unitPartDia = document.getElementById('unit-partdia-circ');
+    const unitVf = document.getElementById('unit-vf-circ');
+
+    if (unitDia) unitDia.textContent = targetUnit === 'metric' ? 'mm' : 'pulg';
+    if (unitPartDia) unitPartDia.textContent = targetUnit === 'metric' ? 'mm' : 'pulg';
+    if (unitVf) unitVf.textContent = targetUnit === 'metric' ? 'mm/min' : 'in/min';
+
+    const diaEl = document.getElementById('circ_dia');
+    const partDiaEl = document.getElementById('circ_part_dia');
+    const vfEl = document.getElementById('circ_vf');
+
+    if (!force) {
+        if (diaEl && diaEl.value !== '') {
+            const val = parseFloat(diaEl.value);
+            diaEl.value = targetUnit === 'imperial' ? (val / 25.4).toFixed(3) : (val * 25.4).toFixed(3);
+        }
+        if (partDiaEl && partDiaEl.value !== '') {
+            const val = parseFloat(partDiaEl.value);
+            partDiaEl.value = targetUnit === 'imperial' ? (val / 25.4).toFixed(3) : (val * 25.4).toFixed(3);
+        }
+        if (vfEl && vfEl.value !== '') {
+            const val = parseFloat(vfEl.value);
+            vfEl.value = targetUnit === 'imperial' ? (val / 25.4).toFixed(3) : (val * 25.4).toFixed(3);
+        }
+    }
+
+    calculateCircular();
 }
