@@ -68,9 +68,11 @@ function initServiceWorker() {
         }
     });
 
-    navigator.serviceWorker.register('./sw.js')
+    // El SW ya fue registrado por el script inline en <head>.
+    // Aquí solo obtenemos la referencia para gestionar actualizaciones.
+    navigator.serviceWorker.ready
         .then((registration) => {
-            console.log('[App] Service Worker registrado correctamente:', registration.scope);
+            console.log('[App] Service Worker activo y controlando:', registration.scope);
 
             // Verificación de salud para asegurar que no esté pegado
             checkServiceWorkerHealth();
@@ -100,7 +102,7 @@ function initServiceWorker() {
             }
         })
         .catch((error) => {
-            console.warn('[App] Aviso al registrar Service Worker:', error);
+            console.warn('[App] Aviso con Service Worker:', error);
         });
 }
 

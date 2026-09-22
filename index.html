@@ -14,6 +14,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Asistente CNC">
     <link rel="apple-touch-icon" href="icono.png">
+
+    <!-- Registro temprano del Service Worker (inline para máxima resiliencia offline) -->
+    <!-- Este script se ejecuta antes que script.js y está embebido en el HTML cacheado -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(function(e) {
+          // Silencioso: si el SW ya está registrado o no hay red, esto es esperado
+        });
+      }
+    </script>
 </head>
 <body>
 
