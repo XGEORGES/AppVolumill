@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cnc-assistant-v6';
+const CACHE_NAME = 'cnc-assistant-v7';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -9,8 +9,8 @@ const CORE_ASSETS = [
 ];
 
 // 1. INSTALACIÓN RESILIENTE:
-// Cachea todos los recursos core. Si alguno falla, la instalación continúa
-// pero se valida que al menos index.html esté en caché.
+// Cachea todos los recursos core. Si alguno falla, la instalación continúa.
+// COPIA TODOS los recursos de cachés anteriores que no se pudieron descargar.
 self.addEventListener('install', (event) => {
   console.log('[Service Worker] Instalando nueva versión:', CACHE_NAME);
   event.waitUntil(
@@ -22,49 +22,80 @@ self.addEventListener('install', (event) => {
           if (response && (response.status === 200 || response.type === 'opaque')) {
             await cache.put(url, response);
             console.log('[Service Worker] Pre-cacheado con éxito:', url);
+            return true;
           }
         } catch (err) {
-          console.warn('[Service Worker] Recurso no descargado en install (se usará respaldo previo):', url);
+          console.warn('[Service Worker] Recurso no descargado en install:', url);
         }
+        return false;
       });
-      await Promise.allSettled(cachePromises);
+      const results = await Promise.allSettled(cachePromises);
 
-      // VALIDACIÓN CRÍTICA: Asegurar que al menos index.html está en caché
-      // Si no, intentar copiar desde una caché anterior antes de borrarla
-      const indexCached = await cache.match('./index.html');
-      if (!indexCached) {
-        console.warn('[Service Worker] index.html NO está en la nueva caché. Buscando en cachés anteriores...');
-        const allCacheNames = await caches.keys();
-        for (const oldCacheName of allCacheNames) {
-          if (oldCacheName === CACHE_NAME) continue;
-          const oldCache = await caches.open(oldCacheName);
-          const oldIndex = await oldCache.match('./index.html') ||
-                           await oldCache.match('index.html') ||
-                           await oldCache.match('./');
-          if (oldIndex) {
-            await cache.put('./index.html', oldIndex.clone());
-            await cache.put('./', oldIndex.clone());
-            console.log('[Service Worker] index.html rescatado desde caché anterior:', oldCacheName);
-            break;
+      // RESCATE: Para CADA recurso que no se pudo descargar, copiar desde cachés anteriores
+      const allCacheNames = await caches.keys();
+      const oldCacheNames = allCacheNames.filter(n => n !== CACHE_NAME);
+
+      for (let i = 0; i < CORE_ASSETS.length; i++) {
+        const url = CORE_ASSETS[i];
+        const succeeded = results[i].status === 'fulfilled' && results[i].value === true;
+        if (succeeded) continue;
+
+        // Intentar rescatar este recurso de cachés anteriores
+        for (const oldCacheName of oldCacheNames) {
+          try {
+            const oldCache = await caches.open(oldCacheName);
+            // Intentar múltiples variantes de la URL
+            const candidates = [url];
+            if (url === './index.html') candidates.push('index.html', './');
+            if (url === './') candidates.push('index.html', './index.html');
+
+            let found = false;
+            for (const candidate of candidates) {
+              const oldResponse = await oldCache.match(candidate, { ignoreSearch: true });
+              if (oldResponse) {
+                await cache.put(url, oldResponse.clone());
+                console.log('[Service Worker] Recurso rescatado desde caché anterior:', url, '←', oldCacheName);
+                found = true;
+                break;
+              }
+            }
+            if (found) break;
+          } catch (e) {
+            // Continuar con la siguiente caché
           }
         }
       }
+
+      // Asegurar que './' también apunte a index.html si existe
+      const indexCached = await cache.match('./index.html');
+      if (indexCached) {
+        const rootCached = await cache.match('./');
+        if (!rootCached) {
+          await cache.put('./', indexCached.clone());
+        }
+      }
+
+      // Verificar estado final
+      const finalCheck = await cache.match('./index.html');
+      if (finalCheck) {
+        console.log('[Service Worker] ✅ Instalación completa: index.html disponible en caché');
+      } else {
+        console.warn('[Service Worker] ⚠️ index.html NO disponible - primera instalación requiere internet');
+      }
     }).then(() => {
-      // Activar inmediatamente esta versión para que esté disponible de inmediato
       return self.skipWaiting();
     })
   );
 });
 
-// 2. ACTIVACIÓN LIMPIA:
-// Elimina versiones antiguas de caché, habilita Navigation Preload, y toma control de clientes
+// 2. ACTIVACIÓN SEGURA:
+// SOLO elimina cachés antiguas si la nueva caché tiene los recursos necesarios.
+// Si la nueva caché está vacía (instalación offline sin datos previos), CONSERVA las antiguas.
 self.addEventListener('activate', (event) => {
   console.log('[Service Worker] Activado y tomando control:', CACHE_NAME);
   event.waitUntil(
     (async () => {
       // Habilitar Navigation Preload si está disponible
-      // Esto permite que el navegador haga un fetch de navegación en paralelo
-      // mientras el SW se está despertando, evitando el problema de "SW dormido"
       if (self.registration.navigationPreload) {
         try {
           await self.registration.navigationPreload.enable();
@@ -74,16 +105,55 @@ self.addEventListener('activate', (event) => {
         }
       }
 
-      // Purgar cachés obsoletas
+      // VERIFICAR que la nueva caché tiene index.html antes de borrar las antiguas
+      const newCache = await caches.open(CACHE_NAME);
+      const hasIndex = await newCache.match('./index.html') ||
+                       await newCache.match('index.html') ||
+                       await newCache.match('./');
+
       const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('[Service Worker] Purgando caché obsoleta:', cache);
-            return caches.delete(cache);
+      const oldCacheNames = cacheNames.filter(name => name !== CACHE_NAME);
+
+      if (hasIndex) {
+        // ✅ La nueva caché tiene contenido → seguro borrar las antiguas
+        await Promise.all(
+          oldCacheNames.map((name) => {
+            console.log('[Service Worker] Purgando caché obsoleta:', name);
+            return caches.delete(name);
+          })
+        );
+      } else if (oldCacheNames.length > 0) {
+        // ⚠️ La nueva caché NO tiene contenido pero HAY cachés antiguas
+        // Rescatar TODO desde la caché antigua más reciente
+        console.warn('[Service Worker] Nueva caché vacía. Rescatando recursos de cachés anteriores...');
+        for (const oldCacheName of oldCacheNames) {
+          try {
+            const oldCache = await caches.open(oldCacheName);
+            const oldKeys = await oldCache.keys();
+            for (const request of oldKeys) {
+              const response = await oldCache.match(request);
+              if (response) {
+                await newCache.put(request, response.clone());
+                console.log('[Service Worker] Rescatado en activate:', request.url);
+              }
+            }
+            // Si rescatamos contenido, ahora sí es seguro borrar
+            const rescuedIndex = await newCache.match('./index.html') ||
+                                 await newCache.match('index.html') ||
+                                 await newCache.match('./');
+            if (rescuedIndex) {
+              console.log('[Service Worker] ✅ Rescate exitoso desde:', oldCacheName);
+              // Ahora borrar las cachés antiguas
+              await Promise.all(
+                oldCacheNames.map(name => caches.delete(name))
+              );
+              break;
+            }
+          } catch (e) {
+            console.warn('[Service Worker] Error rescatando desde:', oldCacheName, e);
           }
-        })
-      );
+        }
+      }
 
       // Tomar control inmediato de todas las pestañas/clientes
       await self.clients.claim();
